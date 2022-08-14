@@ -9,15 +9,19 @@
 	{
 		Tags { "RenderType" = "Opaque" }
 		LOD 100
-
+		
 		Pass
 		{
+			cull off
+			ztest always
+		zwrite off
 			CGPROGRAM
 			#pragma vertex vert
 			#pragma fragment frag
-                #pragma multi_compile __ _BLIT_ALBEDO
+          
 
 			#include "UnityCG.cginc"
+ 
 			sampler2D _Control0;
 		float4 _Control0_ST;
 
@@ -40,6 +44,10 @@
 				float2 uv : TEXCOORD0;
 				float3 normal : NORMAL;
 				float4 tangent : TANGENT;
+			};
+			struct PixelOutput {
+				float4 col0 : COLOR0;
+				float4 col1 : COLOR1;
 			};
 
 			struct v2f
@@ -66,14 +74,14 @@
 
 				mixedDiffuse = 0.0f;
 				mixedNormal = 0.0f;
-#ifdef _BLIT_ALBEDO
+// #ifdef _BLIT_ALBEDO
 
 				mixedDiffuse += splat_control.r * UNITY_SAMPLE_TEX2DARRAY(albedoAtlas, float3(IN.tc_Control0 * tileData[passIndex * 4].xy, passIndex * 4));
 				mixedDiffuse += splat_control.g * UNITY_SAMPLE_TEX2DARRAY(albedoAtlas, float3(IN.tc_Control0 * tileData[passIndex * 4 + 1].xy, passIndex * 4 + 1));
 				mixedDiffuse += splat_control.b * UNITY_SAMPLE_TEX2DARRAY(albedoAtlas, float3(IN.tc_Control0 * tileData[passIndex * 4 + 2].xy, passIndex * 4 + 2));
 				mixedDiffuse += splat_control.a * UNITY_SAMPLE_TEX2DARRAY(albedoAtlas, float3(IN.tc_Control0 * tileData[passIndex * 4 + 3].xy, passIndex * 4 + 3));
 
-#else
+ //#else
 
 
 				fixed4 nrm = 0.0f;
@@ -84,7 +92,7 @@
 				mixedNormal = UnpackNormal(nrm);
 
 
-#endif
+// #endif
 
 			}
 
@@ -105,8 +113,9 @@
 				v.tangent.w = -1;
 				return o;
 			}
+ 
 
-			fixed4 frag(v2f IN) : SV_Target
+			PixelOutput frag(v2f IN) 
 			{
 
 				half4 splat_control;
@@ -129,15 +138,14 @@
 			//SplatmapMix(_Control3, 3, IN, splat_control, weight, mixedDiffuse, mixedNormal);
 			//DiffuseAll += mixedDiffuse * weight;
 			//NormalAll += (mixedNormal * weight);
-
-#ifdef _BLIT_ALBEDO
-			return   DiffuseAll;// mixedDiffuse.rgb;
-#else
-
-			return  half4(NormalAll.xyz * 0.5 + 0.5, 1);// o.Normal * 0.5 + 0.5;
-#endif
-			 
-				}
+			PixelOutput po;
+			po.col0 =  DiffuseAll;
+			po.col1 =   half4(NormalAll.xyz * 0.5 + 0.5, 1);
+ 
+			return po;
+			}
+ 
+ 
 				ENDCG
 			}
 	}

@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class VirtualCapture : MonoBehaviour {
-	private Material[] captureMats;
+	private Material captureMat;
 	public Shader captureShader;
 	public TerrainData terrainData;
 
 	public Texture2DArray albedoAtlas;
 	public Texture2DArray normalAtlas;
 	public RenderTexture[] clipRTs;
+	private RenderBuffer[] mrtRB = new RenderBuffer[2];
 	public int mipmapCount;
 	public const int virtualTextArraySize = 512;
 	// Use this for initialization
@@ -20,7 +21,7 @@ public class VirtualCapture : MonoBehaviour {
 		for (int i = 0; i < clipRTs.Length; i++)
 		{
 
-			clipRTs[i] = new RenderTexture(virtualTextArraySize, virtualTextArraySize, 0, i == 0 ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGB32, i == 0 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear);
+			clipRTs[i] = new RenderTexture(virtualTextArraySize, virtualTextArraySize, 16, i == 0 ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGB32, i == 0 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear);
 			clipRTs[i].useMipMap = true;
 			clipRTs[i].autoGenerateMips = false;
 			clipRTs[i].Create();
@@ -29,23 +30,20 @@ public class VirtualCapture : MonoBehaviour {
 
 
 
-		captureMats = new Material[2];
 
 
-		for (int i = 0; i < captureMats.Length; i++)
-		{
 
 
-			var mat = new Material(captureShader);
+
+		captureMat = new Material(captureShader);
             for (int k = 0; k < terrainData.alphamapTextures.Length; k++)
             {
-				mat.SetTexture("_Control"+k, terrainData.alphamapTextures[k]);
+			captureMat.SetTexture("_Control"+k, terrainData.alphamapTextures[k]);
 			}
 			
  
 
-			captureMats[i] = mat;
-		}
+		 
 
 		var tileData = new Vector4[terrainData.splatPrototypes.Length];
 		for (int i = 0; i < tileData.Length; i++)
@@ -54,14 +52,15 @@ public class VirtualCapture : MonoBehaviour {
 
 
 		}
-		captureMats[0].EnableKeyword("_BLIT_ALBEDO");
-		captureMats[1].DisableKeyword("_BLIT_ALBEDO");
+ 
 		Shader.SetGlobalTexture("albedoAtlas", albedoAtlas);
 		Shader.SetGlobalTexture("normalAtlas", normalAtlas);
 		Shader.SetGlobalVectorArray("tileData", tileData);
 		Shader.SetGlobalInt("virtualTextArraySize", virtualTextArraySize);
 
-
+		//mrt mode
+		mrtRB = new RenderBuffer[] { clipRTs[0].colorBuffer, clipRTs[1].colorBuffer };
+		 
 
 	}
 	void OnDestroy()
@@ -78,17 +77,41 @@ public class VirtualCapture : MonoBehaviour {
 		}
 
 	}
-	public	RenderTexture virtualCapture(Vector2 center, float size,int mode)
+ 
+ 
+	public void  virtualCapture_MRT(Vector2 center, float size, out RenderTexture albedoRT,out RenderTexture normalRT)
 	{
 
-		 
 		int terrainSize = (int)terrainData.size.x;
 
 		Shader.SetGlobalVector("blitOffsetScale", new Vector4((center.x - size / 2) / terrainSize, (center.y - size / 2) / terrainSize, (size) / terrainSize, (size) / terrainSize));
-		Graphics.Blit(null, clipRTs[mode], captureMats[mode], 0);
-		clipRTs[mode].GenerateMips();
-		return clipRTs[mode];
 
+		RenderTexture oldRT = RenderTexture.active;
+
+		Graphics.SetRenderTarget(mrtRB,clipRTs[0].depthBuffer);
+
+		GL.Clear(false, true, Color.clear);
+
+		GL.PushMatrix();
+		GL.LoadOrtho();
+
+		captureMat.SetPass(0);     //Pass 0 outputs 2 render textures.
+
+		//Render the full screen quad manually.
+		GL.Begin(GL.QUADS);
+		GL.TexCoord2(0.0f, 0.0f); GL.Vertex3(0.0f, 0.0f, 0.1f);
+		GL.TexCoord2(1.0f, 0.0f); GL.Vertex3(1.0f, 0.0f, 0.1f);
+		GL.TexCoord2(1.0f, 1.0f); GL.Vertex3(1.0f, 1.0f, 0.1f);
+		GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(0.0f, 1.0f, 0.1f);
+		GL.End();
+
+		GL.PopMatrix();
+
+		RenderTexture.active = oldRT;
+		albedoRT = clipRTs[0];
+		normalRT = clipRTs[1];
+		albedoRT.GenerateMips();
+		normalRT.GenerateMips();
 	}
 
 #if UNITY_EDITOR

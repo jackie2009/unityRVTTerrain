@@ -261,7 +261,7 @@ public class VT_Terrain : MonoBehaviour
     public RenderTexture indexRT;
 
     private VirtualCapture virtualCapture;
-
+   
     void Start()
     {
 
@@ -309,10 +309,12 @@ public class VT_Terrain : MonoBehaviour
          root =   Node.createRoot(rootSize, clipRTAlbedoArray.volumeDepth, onLoadNodeData);
         Shader.SetGlobalInt("VT_RootSize", rootSize);
         //  root =   Node.createRoot(16,100, onLoadNodeData);
-
-
+       
 
     }
+
+ 
+
     void OnDestroy()
     {
         if (indexRT != null) indexRT.Release();
@@ -347,7 +349,7 @@ public class VT_Terrain : MonoBehaviour
 
     }
 #endif
-
+   
     // Update is called once per frame
     void Update()
     {
@@ -368,20 +370,17 @@ public class VT_Terrain : MonoBehaviour
 
     private void onLoadNodeData(Node item)
     {
- 
+
+        
         Profiler.BeginSample("onLoadNodeData");
+     
+        RenderTexture albedoRT, normalRT;
 
-        var rt = virtualCapture.virtualCapture(new Vector2(item.x + item.size / 2.0f, item.z + item.size / 2.0f), item.size, 0);
-
-
+        virtualCapture.virtualCapture_MRT(new Vector2(item.x + item.size / 2.0f, item.z + item.size / 2.0f), item.size, out albedoRT, out normalRT);
         for (int i = 0; i < 4; i++)
         {
-            Graphics.CopyTexture(rt, 0, i, clipRTAlbedoArray, item.physicTexIndex, i);
-        }
-        rt = virtualCapture.virtualCapture(new Vector2(item.x + item.size / 2.0f, item.z + item.size / 2.0f), item.size, 1);
-        for (int i = 0; i < 4; i++)
-        {
-            Graphics.CopyTexture(rt, 0, i, clipRTNormalArray, item.physicTexIndex, i);
+            Graphics.CopyTexture(albedoRT, 0, i, clipRTAlbedoArray, item.physicTexIndex, i);
+            Graphics.CopyTexture(normalRT, 0, i, clipRTNormalArray, item.physicTexIndex, i);
         }
 
         indexGenerator.SetVector("value", new Vector4(item.physicTexIndex, item.x, item.z, item.size));
@@ -392,6 +391,7 @@ public class VT_Terrain : MonoBehaviour
         indexGenerator.SetInt("offsetZ", item.z);
         indexGenerator.Dispatch(0, rectSize, rectSize, 1);
         Profiler.EndSample();
+
     }
 
 }

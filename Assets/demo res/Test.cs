@@ -14,14 +14,7 @@ public class Test : MonoBehaviour {
 	public Terrain terrain;
 	private float startTime = 0;
 	private bool moving = true;
-	[ContextMenu("clear")]
-	void clear() {
-		var td=GetComponent<Terrain>().terrainData;
-	 
-		td.splatPrototypes= new SplatPrototype[1] { td.splatPrototypes[0] };
-		td.RefreshPrototypes();
-		GetComponent<Terrain>().terrainData = td;
-	}
+ 
 	
 	// Update is called once per frame
 	void Update () {
@@ -52,24 +45,7 @@ public class Test : MonoBehaviour {
 		transform.position = Vector3.Lerp(transform.position, pos, lerp);
 	}
 
-	List<Vector3> circleList = new List<Vector3>();
-	float minCircle = 0.3f;
-	float maxCircle = 1.0f;
-	float getSdf(Vector2 pos,Rect rect) {
-		Vector2 limit = new Vector2(Mathf.Min( pos.x, rect.width - pos.x), Mathf.Min(pos.y, rect.height - pos.y));
-		float sdf = Mathf.Min(limit.x, limit.y, maxCircle);
-        foreach (var c in circleList)
-        {
-			float d = Vector2.Distance(pos, c) - c.z;
-			
-			if (d < minCircle) return -1;
-			sdf = Mathf.Min(d, sdf);
-
-        }
-		if (sdf < minCircle) return -1;
-		return  sdf;
-	}
-  
+ 
 	void Start() {
  
 
