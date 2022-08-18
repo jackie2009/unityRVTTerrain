@@ -44,11 +44,12 @@ public class Test : MonoBehaviour {
 		pos.y = terrain.SampleHeight(pos) + hight;
 		transform.position = Vector3.Lerp(transform.position, pos, lerp);
 	}
-
+	
  
 	void Start() {
+	
  
 
 	}
- 
+
 }

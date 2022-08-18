@@ -12,16 +12,19 @@ public class VirtualCapture : MonoBehaviour {
 	public RenderTexture[] clipRTs;
 	private RenderBuffer[] mrtRB = new RenderBuffer[2];
 	public int mipmapCount;
-	public const int virtualTextArraySize = 512;
+	public const int virtualTextArraySize = 256;
 	// Use this for initialization
+	public Shader decalBlitShader;
+	private Material captureDecalMat;
+ 
 	void Awake () {
-		
+		captureDecalMat = new Material(decalBlitShader);
 		mipmapCount = (int)Mathf.Log(virtualTextArraySize, 2);
 		clipRTs = new RenderTexture[2];// 
 		for (int i = 0; i < clipRTs.Length; i++)
 		{
 
-			clipRTs[i] = new RenderTexture(virtualTextArraySize, virtualTextArraySize, 16, i == 0 ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGB32, i == 0 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear);
+			clipRTs[i] = new RenderTexture(virtualTextArraySize, virtualTextArraySize, 0, i == 0 ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGB32, i == 0 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear);
 			clipRTs[i].useMipMap = true;
 			clipRTs[i].autoGenerateMips = false;
 			clipRTs[i].Create();
@@ -77,11 +80,13 @@ public class VirtualCapture : MonoBehaviour {
 		}
 
 	}
- 
- 
-	public void  virtualCapture_MRT(Vector2 center, float size, out RenderTexture albedoRT,out RenderTexture normalRT)
-	{
 
+ 
+	public void  virtualCapture_MRT(VT_Terrain.Node item , out RenderTexture albedoRT,out RenderTexture normalRT)
+	{
+		Vector2 center = new Vector2(item.x + item.size / 2.0f, item.z + item.size / 2.0f);
+		float size = item.size;
+		HashSet<Renderer> decals = item.decals;
 		int terrainSize = (int)terrainData.size.x;
 
 		Shader.SetGlobalVector("blitOffsetScale", new Vector4((center.x - size / 2) / terrainSize, (center.y - size / 2) / terrainSize, (size) / terrainSize, (size) / terrainSize));
@@ -93,7 +98,8 @@ public class VirtualCapture : MonoBehaviour {
 		GL.Clear(false, true, Color.clear);
 
 		GL.PushMatrix();
-		GL.LoadOrtho();
+		 GL.LoadOrtho();
+		GL.modelview = Matrix4x4.identity;
 
 		captureMat.SetPass(0);     //Pass 0 outputs 2 render textures.
 
@@ -105,8 +111,44 @@ public class VirtualCapture : MonoBehaviour {
 		GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(0.0f, 1.0f, 0.1f);
 		GL.End();
 
-		GL.PopMatrix();
+	 
+		if (decals != null)
+		{
+			//print("decals:" + item.size + "," + item.physicTexIndex);
+			foreach (var decalRender in decals)
+			{
 
+
+				var r = decalRender.transform.localRotation;
+				var s = decalRender.transform.localScale;
+				var re = r.eulerAngles;
+				re.x -= 90;
+				re.z = -re.y;
+				re.y = 0;
+				r.eulerAngles = re;
+				var t = (decalRender.transform.position - new Vector3(item.x, decalRender.transform.position.y, item.z)) / size;
+			 
+				t.y = t.z;
+				t.z = 0;
+
+			 	GL.modelview = Matrix4x4.TRS(t, r, s / size);
+				captureDecalMat.mainTextureOffset = decalRender.sharedMaterial.mainTextureOffset;
+				captureDecalMat.mainTextureScale = decalRender.sharedMaterial.mainTextureScale;
+				captureDecalMat.SetTexture("_MainTex", decalRender.sharedMaterial.GetTexture("_MainTex"));
+				captureDecalMat.SetTexture("_BumpMap", decalRender.sharedMaterial.GetTexture("_BumpMap"));
+				captureDecalMat.SetPass(0);     //Pass 0 outputs 2 render textures.
+
+				//Render the full screen quad manually.
+				GL.Begin(GL.QUADS);
+				GL.TexCoord2(0.0f, 0.0f); GL.Vertex3(-0.5f, -0.5f, 0.1f);
+				GL.TexCoord2(1.0f, 0.0f); GL.Vertex3(0.5f, -0.5f, 0.1f);
+				GL.TexCoord2(1.0f, 1.0f); GL.Vertex3(0.5f, 0.5f, 0.1f);
+				GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(-0.5f, 0.5f, 0.1f);
+				GL.End();
+			}
+		}
+        
+   GL.PopMatrix();
 		RenderTexture.active = oldRT;
 		albedoRT = clipRTs[0];
 		normalRT = clipRTs[1];

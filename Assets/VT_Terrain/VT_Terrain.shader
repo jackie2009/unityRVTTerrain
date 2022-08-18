@@ -8,7 +8,7 @@ Shader "VT_Terrain" {
 		}
 
 			CGINCLUDE
-#pragma surface surf Lambert vertex:SplatmapVert2 finalcolor:SplatmapFinalColor finalprepass:SplatmapFinalPrepass finalgbuffer:SplatmapFinalGBuffer noinstancing
+#pragma surface surf Lambert vertex:SplatmapVert2  
 #pragma multi_compile_fog
 #include "TerrainSplatmapCommon.cginc"
  
@@ -35,7 +35,7 @@ Shader "VT_Terrain" {
 				v.tangent.w = -1;
  
 			}
-				void surf(Input IN, inout SurfaceOutput o)
+				void surf(Input IN, inout SurfaceOutput  o)
 			{
 				half4 splat_control;
 				half weight=1;
@@ -57,7 +57,7 @@ Shader "VT_Terrain" {
 				 
 			//	  localUV = lerp((1<< (5 - lod))/ 256.0, 1 - (1 << (5 - lod)) / 256.0, localUV);
 
-				fixed4 albedo = UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_AlbedoTex, float3(localUV, indexData.r), mipmap);
+				fixed4 albedo =  UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_AlbedoTex, float3(localUV, indexData.r), mipmap);
 				float3 normal = UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_NormalTex, float3(localUV, indexData.r), mipmap);
 				normal =  normal * 2 - 1;
 
@@ -68,7 +68,7 @@ Shader "VT_Terrain" {
  
 
 					o.Albedo =  mixedDiffuse.rgb;//  +lod * 0.05;
-				  o.Gloss = 0;
+				  
 				o.Alpha = weight;
 			}
 			ENDCG

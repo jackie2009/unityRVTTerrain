@@ -20,6 +20,10 @@ TextureImporter:
     heightScale: 0.25
     normalMapFilter: 0
   isReadable: 1
+  isStreamable: 1
+  streamingMipmapsPriority: 0
+  streamingMipLevelOffset: 0
+  sharpness: 0.12
   grayScaleToAlpha: 0
   generateCubemap: 6
   cubemapConvolution: 0

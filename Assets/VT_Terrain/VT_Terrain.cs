@@ -12,9 +12,10 @@ public class VT_Terrain : MonoBehaviour
 
     public class Node
     {
-    
-       
-    
+
+        private enum NodeState
+        {  Branch,Leaf,Hidden };
+
         public static Queue<Node> currentAllLeaves ;
         private static Queue<Node> nextAllLeaves ;
       
@@ -32,14 +33,42 @@ public class VT_Terrain : MonoBehaviour
         public int x;
         public int z;
         public int size;
-
+       
         public Node[] children;
         public Node parent;
-        public bool isLeaf { get { return children == null; } }
-        public bool parentMerged;
+        private NodeState nodeState;// 树枝 树叶 或隐藏(树叶的子对象 关系保留但逻辑忽略)
+      
+      
         public int physicTexIndex =-1;
-  
-       
+        private int dontMergeOnFrame;
+        public HashSet<Renderer> decals;
+        internal void ceateFullChildren()
+        {
+            nodeState = NodeState.Hidden;
+            if (size <= 1)
+            {
+                
+                return;
+            }
+             
+            if (children == null)
+            {
+                children = new Node[4];
+                children[0] = new Node() { x = x, z = z, size = size / 2, parent = this };
+                children[1] = new Node() { x = x + size / 2, z = z, size = size / 2, parent = this };
+                children[2] = new Node() { x = x, z = z + size / 2, size = size / 2, parent = this };
+                children[3] = new Node() { x = x + size / 2, z = z + size / 2, size = size / 2, parent = this };
+                for (int i = 0; i < 4; i++)
+                {
+                    children[i].ceateFullChildren();
+                }
+            }
+          
+          
+             
+        }
+
+
         public static Node createRoot(int rootSize, int physicIndexCount, Action<Node> onLoadData) {
             Node.onLoadData = onLoadData;
             currentAllLeaves = new Queue<Node>();
@@ -51,11 +80,14 @@ public class VT_Terrain : MonoBehaviour
                 physicEmptyIndexQueue.Enqueue(i);
             }
            var root = new Node();
+
             root.physicTexIndex = getPhysicIndex();
             root.size = rootSize;
+            root.ceateFullChildren();
+            root.nodeState = NodeState.Leaf;
             currentAllLeaves.Enqueue(root);
 
-
+            
 
 
             return root;
@@ -81,25 +113,27 @@ public class VT_Terrain : MonoBehaviour
 
         private void updateState(Vector2 camPos)
         {
-            if (this.parentMerged) return;
+            if (nodeState == NodeState.Hidden) return;
 
-            if (parent != null)
+            if (parent!=null&& nodeState ==  NodeState.Leaf && parent.dontMergeOnFrame != Time.frameCount)
             {
                 int parent_lodSize = parent.calculateLodSize(camPos);
                 bool allBrothersAreLeaf = true;
                 for (int i = 0; i < 4; i++)
                 {
-                    if (parent.children[i].isLeaf == false) allBrothersAreLeaf = false;
+                    if (parent.children[i].nodeState != NodeState.Leaf) allBrothersAreLeaf = false;
                 }
                 if (parent.size <= parent_lodSize&& allBrothersAreLeaf)
                 {
-                    parent.merge();
+                   parent.merge();
                     return;
                 }
                 
 
             }
-            
+            if (parent != null) {
+                parent.dontMergeOnFrame = Time.frameCount;
+            }
             int lodSize = calculateLodSize(camPos);
 
             //当前尺寸刚好符合  lod需要的尺寸 自己保持为叶子 不动
@@ -136,20 +170,22 @@ public class VT_Terrain : MonoBehaviour
         //细分node 给自己增加4个子node 但自己不算做叶子 所以不放队列
         private void split()
         {
+          //  print("split:" + physicTexIndex);
             resetPhysicIndex(this);
-        
-            children = new Node[4];
+            nodeState = NodeState.Branch;
+            //children = new Node[4];
 
-            //为了可读性 这里坐标设置 不写循环里, 也不做成对象池， 后面最好做下
-            children[0] = new Node() { x = x, z = z };
-            children[1] = new Node() { x = x + size / 2, z = z};
-            children[2] = new Node() { x = x, z = z + size / 2 };
-            children[3] = new Node() { x = x + size / 2, z = z + size / 2};
+            ////为了可读性 这里坐标设置 不写循环里, 也不做成对象池， 后面最好做下
+            //children[0] = new Node() { x = x, z = z };
+            //children[1] = new Node() { x = x + size / 2, z = z};
+            //children[2] = new Node() { x = x, z = z + size / 2 };
+            //children[3] = new Node() { x = x + size / 2, z = z + size / 2};
             for (int i = 0; i < 4; i++)
             {
-                children[i].parent = this;
-                children[i].size = size / 2;
-                children[i].physicTexIndex = getPhysicIndex();
+                //  children[i].parent = this;
+                //  children[i].size = size / 2;
+                children[i].nodeState = NodeState.Leaf;
+                  children[i].physicTexIndex = getPhysicIndex();
                 nextAllLeaves.Enqueue(children[i]);
                 onLoadData(children[i]);
 
@@ -164,7 +200,7 @@ public class VT_Terrain : MonoBehaviour
         {
 
             
-
+           
             
             nextAllLeaves.Enqueue(this);
          
@@ -172,33 +208,20 @@ public class VT_Terrain : MonoBehaviour
             for (int i = 0; i < 4; i++)
             {
                 resetPhysicIndex(children[i]);
-                children[i].parent = null;
-                children[i].parentMerged = true;
+                //children[i].parent = null;
+               // children[i].closed = true;
+               children[i].nodeState =  NodeState.Hidden;
+
+               
 
             }
              physicTexIndex = getPhysicIndex();
+           // print("merge:" + physicTexIndex);
             onLoadData(this);
-            children = null;
+            // children = null;
+            nodeState = NodeState.Leaf;
 
-       
-
-            //Node[] brothers = parent.children;
-
-            //parent.children = null;
-
-            //nextAllLeaves.Enqueue(parent);
-            //onLoadData(parent);
-            //var tempParent = parent;
-            //for (int i = 0; i < 4; i++)
-            //{
-            //    resetPhysicIndex(brothers[i]);
-            //    brothers[i].parent = null;
-            //}
-            //tempParent.physicTexIndex = getPhysicIndex();
-
-            //currentAllLeaves.Dequeue();
-            //currentAllLeaves.Dequeue();
-            //currentAllLeaves.Dequeue();
+ 
 
         }
         private int calculateLodSize(Vector2 camPos)
@@ -241,30 +264,55 @@ public class VT_Terrain : MonoBehaviour
             return fSqrDistance;
         }
 
-         
+        //因为远处不绘制贴花 否则一大块要画一堆性能不好 所以 用 nodeSizeLimit做限制
+        internal void insertDecal(int vx, int vz, Renderer decal,int nodeSizeLimit)
+        {
 
-  
+            if (size == 1)
+            {
+                if (decals == null) {
+                    decals = new HashSet<Renderer>();
+                }
+                decals.Add(decal);
+                return;
+            }
+            if (size <= nodeSizeLimit) {
+                if (decals == null)
+                {
+                    decals = new HashSet<Renderer>();
+                }
+                decals.Add(decal);
+            }
+           
+            int offset = 0;
+            if (vx >= x + size / 2) offset++;
+            if (vz >= z + size / 2) offset += 2;
+            children[offset].insertDecal(vx, vz, decal, nodeSizeLimit);
+        }
 
 
-        
+
+
 
 
 
 
     }
     Node root;
-    RenderTexture clipRTAlbedoArray;
-    RenderTexture clipRTNormalArray;
+   public RenderTexture clipRTAlbedoArray;
+    public RenderTexture clipRTNormalArray;
     public int rootSize = 1024;
+    private const int PhysicalTexCount= 385;
     public Vector3 terrainOffset ;
     public ComputeShader indexGenerator;
     public RenderTexture indexRT;
 
     private VirtualCapture virtualCapture;
-   
+    public Transform decalsRoot;
     void Start()
     {
-
+  
+      
         virtualCapture = GetComponent<VirtualCapture>();
         indexRT = new RenderTexture(rootSize, rootSize, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         indexRT.useMipMap = false;
@@ -280,9 +328,9 @@ public class VT_Terrain : MonoBehaviour
 
 
 
-
-        clipRTAlbedoArray = new RenderTexture(VirtualCapture.virtualTextArraySize, VirtualCapture.virtualTextArraySize, 0, RenderTextureFormat.ARGB32);
-        clipRTAlbedoArray.volumeDepth = 256 + 128;
+        
+        clipRTAlbedoArray = new  RenderTexture(VirtualCapture.virtualTextArraySize, VirtualCapture.virtualTextArraySize, 0, RenderTextureFormat.ARGB32);
+        clipRTAlbedoArray.volumeDepth = PhysicalTexCount;
         clipRTAlbedoArray.wrapMode = TextureWrapMode.Clamp;
         clipRTAlbedoArray.dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray;
         clipRTAlbedoArray.useMipMap = true;
@@ -307,10 +355,29 @@ public class VT_Terrain : MonoBehaviour
      
 
          root =   Node.createRoot(rootSize, clipRTAlbedoArray.volumeDepth, onLoadNodeData);
-        Shader.SetGlobalInt("VT_RootSize", rootSize);
+         Shader.SetGlobalInt("VT_RootSize", rootSize);
         //  root =   Node.createRoot(16,100, onLoadNodeData);
-       
+        if (decalsRoot != null)
+        {
+            foreach (var item in decalsRoot.GetComponentsInChildren<Renderer>())
+            {
+                int xMin = (int)(item.bounds.min.x);
+                int xMax = Mathf.CeilToInt(item.bounds.max.x);
+                int zMin = (int)(item.bounds.min.z);
+                int zMax = Mathf.CeilToInt(item.bounds.max.z);
+                for (int x = xMin; x <= xMax; x++)
 
+                {
+                    for (int z = zMin; z <=zMax; z++)
+                    {
+
+                        root.insertDecal(x, z, item,256);
+                    }
+
+                }
+            }
+            decalsRoot.gameObject.SetActive(false);
+        }
     }
 
  
@@ -342,8 +409,8 @@ public class VT_Terrain : MonoBehaviour
             UnityEditor.Handles.Label(terrainOffset + new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), item.physicTexIndex + "");
             leafCount++;
         }
-     print("leafCount:" + leafCount);
-        print("freeIndexCount:" + (clipRTAlbedoArray.volumeDepth- Node.physicEmptyIndexQueue.Count));
+     //print("leafCount:" + leafCount);
+       // print("freeIndexCount:" + (clipRTAlbedoArray.volumeDepth- Node.physicEmptyIndexQueue.Count));
  
 
 
@@ -371,12 +438,12 @@ public class VT_Terrain : MonoBehaviour
     private void onLoadNodeData(Node item)
     {
 
+      //  print("loadata:" + item.physicTexIndex);
         
-        Profiler.BeginSample("onLoadNodeData");
      
         RenderTexture albedoRT, normalRT;
-
-        virtualCapture.virtualCapture_MRT(new Vector2(item.x + item.size / 2.0f, item.z + item.size / 2.0f), item.size, out albedoRT, out normalRT);
+ 
+        virtualCapture.virtualCapture_MRT( item, out albedoRT, out normalRT);
         for (int i = 0; i < 4; i++)
         {
             Graphics.CopyTexture(albedoRT, 0, i, clipRTAlbedoArray, item.physicTexIndex, i);

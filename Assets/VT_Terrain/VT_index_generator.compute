@@ -8,6 +8,7 @@ uint  offsetZ;
 [numthreads(1,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-	 Result[id.xy+ uint2(offsetX, offsetZ)] = value;
+ Result[id.xy+ uint2(offsetX, offsetZ)] = value;
+ 
 	 
 }
