@@ -310,14 +310,12 @@ public class VT_Terrain : MonoBehaviour
         }
 
 
-        internal void insertHeights(int vx, int vz,Vector4 heights)
+        internal void insertHeights(int vx, int vz,Vector2  heights)
         {
            // return;
             var points = new Vector3[]{
                  new Vector3(vx, 0, vz) + Vector3.up * heights.x,
-                new Vector3(vx + 1, 0, vz)  + Vector3.up * heights.y,
-                 new Vector3(vx, 0, vz + 1)  + Vector3.up * heights.z,
-                 new Vector3(vx +1, 0, vz + 1)  + Vector3.up * heights.w
+                 new Vector3(vx +1, 0, vz + 1)  + Vector3.up * heights.y
             };
             if (aabb.size.sqrMagnitude == 0)
             {
@@ -327,8 +325,7 @@ public class VT_Terrain : MonoBehaviour
                 aabb.Encapsulate(points[0]);
             }
             aabb.Encapsulate(points[1]);
-            aabb.Encapsulate(points[2]);
-            aabb.Encapsulate(points[3]);
+ 
             if (size == 1)
             {
                
@@ -359,8 +356,7 @@ public class VT_Terrain : MonoBehaviour
     private VirtualCapture virtualCapture;
     public Transform decalsRoot;
     
-    [Range(0,10)]
-    public int outFrustumLodBias = 2;
+ 
     private Thread threadTerrainLod;
     private Vector3 Camera_main_position;
     private Vector3 Camera_main_forward;
@@ -451,8 +447,9 @@ public class VT_Terrain : MonoBehaviour
                terrain.terrainData.GetHeight(x/2+1, z/2) ,
                terrain.terrainData.GetHeight(x/2, z/2+1) ,
                terrain.terrainData.GetHeight(x/2+1, z/2+1) );
-
-                root.insertHeights(x, z, cornerHeights);
+                Vector2 heightRange = new Vector2(Mathf.Min(cornerHeights.x, cornerHeights.y, cornerHeights.z, cornerHeights.w),
+                    Mathf.Max(cornerHeights.x, cornerHeights.y, cornerHeights.z, cornerHeights.w));
+                root.insertHeights(x, z, heightRange);
             }
         }
        
@@ -471,14 +468,15 @@ public class VT_Terrain : MonoBehaviour
                           Node.updateAllLeavesState(Camera_main_position - terrainOffset);
                 #if UNITY_EDITOR
                      }
-                #endif
+#endif
+            Debug.LogError(44);
         }
 
     }
     bool isInFrustum(Node item) {
  
         //这部分 常规的 视锥剔除 性能是严重不足的 所以用视锥的外接圆锥 夹角做更保守剔除
-        Vector3 dpos = item.aabb.center -Camera_main_position;
+        Vector3 dpos = item.aabb.center -Camera_main_position +  terrainOffset;
         float dis = dpos.magnitude;
    
         float rAll = Mathf.Acos(Vector3.Dot(dpos.normalized, Camera_main_forward));
@@ -495,6 +493,7 @@ public class VT_Terrain : MonoBehaviour
 
     void OnDestroy()
     {
+        if (threadTerrainLod != null) threadTerrainLod.Abort();
         if (indexRT != null) indexRT.Release();
         if (clipRTAlbedoArray != null) clipRTAlbedoArray.Release();
         if (clipRTNormalArray != null) clipRTNormalArray.Release();
