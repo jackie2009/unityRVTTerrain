@@ -41,10 +41,16 @@ public class VT_Terrain : MonoBehaviour
       
         public int physicTexIndex =-1;
         private int dontMergeOnFrame;
+        public Bounds aabb;
+        
         public HashSet<Renderer> decals;
+        internal static Func<Node, bool> isInFrustum;
+ 
+
         internal void ceateFullChildren()
         {
             nodeState = NodeState.Hidden;
+          
             if (size <= 1)
             {
                 
@@ -80,7 +86,7 @@ public class VT_Terrain : MonoBehaviour
                 physicEmptyIndexQueue.Enqueue(i);
             }
            var root = new Node();
-
+        
             root.physicTexIndex = getPhysicIndex();
             root.size = rootSize;
             root.ceateFullChildren();
@@ -92,14 +98,14 @@ public class VT_Terrain : MonoBehaviour
 
             return root;
         }
-
-        public static void updateAllLeavesState(Vector2 camPos) {
+       
+        public static void updateAllLeavesState(Vector3 relativeCamPos) {
             splitCount = 0;
             nextAllLeaves.Clear();
          
             while (currentAllLeaves.Count > 0) {
                 var node = currentAllLeaves.Dequeue();
-                node.updateState(camPos);
+                node.updateState(relativeCamPos);
                
             }
        
@@ -111,13 +117,13 @@ public class VT_Terrain : MonoBehaviour
 
         }
 
-        private void updateState(Vector2 camPos)
+        private void updateState(Vector3 relativeCamPos)
         {
             if (nodeState == NodeState.Hidden) return;
 
             if (parent!=null&& nodeState ==  NodeState.Leaf && parent.dontMergeOnFrame != Time.frameCount)
             {
-                int parent_lodSize = parent.calculateLodSize(camPos);
+                int parent_lodSize = parent.calculateLodSize(relativeCamPos);
                 bool allBrothersAreLeaf = true;
                 for (int i = 0; i < 4; i++)
                 {
@@ -134,7 +140,7 @@ public class VT_Terrain : MonoBehaviour
             if (parent != null) {
                 parent.dontMergeOnFrame = Time.frameCount;
             }
-            int lodSize = calculateLodSize(camPos);
+            int lodSize = calculateLodSize(relativeCamPos);
 
             //当前尺寸刚好符合  lod需要的尺寸 自己保持为叶子 不动
             if (size == lodSize)
@@ -224,28 +230,39 @@ public class VT_Terrain : MonoBehaviour
  
 
         }
-        private int calculateLodSize(Vector2 camPos)
+        private int calculateLodSize(Vector3 relativeCamPos)
         {
-            var dis = CalculateClosestPoint(camPos, new Vector2(x + size / 2, z + size / 2), new Vector2(size / 2, size / 2));
-            dis = Mathf.Max(1, Mathf.Sqrt(dis));
-         // int lod = Mathf.Max(0, (int)(Mathf.Log(dis, 2) + 0.5));
-              int lod = Mathf.Max(0, (int)(Mathf.Log(dis, 2) + 0.5));
-          
-          
+            var dis = CalculateClosestPoint( relativeCamPos, aabb);
+              dis = Mathf.Max(1, Mathf.Sqrt(dis));
+ 
+         
+           int lod = Mathf.Max(0, (int)(Mathf.Log(Mathf.Tan(Camera.main.fieldOfView / 2 * Mathf.Deg2Rad) * dis, 2)  ));
+
+            
+                if (isInFrustum(this) == false)
+                {
+                //0.577f  为 60fov的 tan 半角值,这样做是因为 现有项目不开镜的时候一般都是60 这样转身的时候就不用变化lod和加载了,可根据实际项目决定 视锥外的这个lod
+                int lodMax = Mathf.Max(0, (int)(Mathf.Log(dis*0.577f, 2)));
+                lod = Mathf.Max(lod, lodMax);
+                   
+                }
+ 
             return 1 << lod;
         }
 
-        float CalculateClosestPoint(Vector2 pos, Vector2 centerPos, Vector2 aabbExt)
+        float CalculateClosestPoint(Vector3 pos, Bounds bound)
         {
 
+            Vector3 centerPos =  bound.center;
+            Vector3 aabbExt = bound.extents;
             // compute coordinates of point in box coordinate system
-            Vector2 closestPos = pos - centerPos;
+            Vector3 closestPos = pos - centerPos;
 
             // project test point onto box
             float fSqrDistance = 0;
             float fDelta = 0;
-
-            for (int i = 0; i < 2; i++)
+          
+            for (int i = 0; i < 3; i++)
             {
                 if (closestPos[i] < -aabbExt[i])
                 {
@@ -262,6 +279,7 @@ public class VT_Terrain : MonoBehaviour
             }
 
             return fSqrDistance;
+            
         }
 
         //因为远处不绘制贴花 否则一大块要画一堆性能不好 所以 用 nodeSizeLimit做限制
@@ -291,6 +309,36 @@ public class VT_Terrain : MonoBehaviour
         }
 
 
+        internal void insertHeights(int vx, int vz,Vector4 heights)
+        {
+           // return;
+            var points = new Vector3[]{
+                 new Vector3(vx, 0, vz) + Vector3.up * heights.x,
+                new Vector3(vx + 1, 0, vz)  + Vector3.up * heights.y,
+                 new Vector3(vx, 0, vz + 1)  + Vector3.up * heights.z,
+                 new Vector3(vx +1, 0, vz + 1)  + Vector3.up * heights.w
+            };
+            if (aabb.size.sqrMagnitude == 0)
+            {
+                aabb = new Bounds(points[0], Vector3.one*0.1f);
+            }
+            else {
+                aabb.Encapsulate(points[0]);
+            }
+            aabb.Encapsulate(points[1]);
+            aabb.Encapsulate(points[2]);
+            aabb.Encapsulate(points[3]);
+            if (size == 1)
+            {
+               
+                return;
+            } 
+             
+            int offset = 0;
+            if (vx >= x + size / 2) offset++;
+            if (vz >= z + size / 2) offset += 2;
+            children[offset].insertHeights(vx, vz, heights);
+        }
 
 
 
@@ -309,6 +357,9 @@ public class VT_Terrain : MonoBehaviour
 
     private VirtualCapture virtualCapture;
     public Transform decalsRoot;
+    private Plane[] frustumPlanes;
+    [Range(0,10)]
+    public int outFrustumLodBias = 2;
     void Start()
     {
   
@@ -349,12 +400,13 @@ public class VT_Terrain : MonoBehaviour
 
 
 
-     
 
-      
-     
 
-         root =   Node.createRoot(rootSize, clipRTAlbedoArray.volumeDepth, onLoadNodeData);
+
+
+        Node.isInFrustum = isInFrustum;
+
+        root =   Node.createRoot(rootSize, clipRTAlbedoArray.volumeDepth, onLoadNodeData);
          Shader.SetGlobalInt("VT_RootSize", rootSize);
         //  root =   Node.createRoot(16,100, onLoadNodeData);
         if (decalsRoot != null)
@@ -378,9 +430,40 @@ public class VT_Terrain : MonoBehaviour
             }
             decalsRoot.gameObject.SetActive(false);
         }
+
+        var terrain = FindObjectOfType<Terrain>();
+        //如果要最高性能 先插入到 最小格子 1mx1m 然后向上合计出parent的数据性能更高些 但是初始化时性能不敏感 这样写可读性更好
+        for (int x = 0; x < rootSize; x++)
+        {
+            for (int z = 0; z < rootSize; z++)
+            {
+               Vector4 cornerHeights=new Vector4(
+               terrain.terrainData.GetHeight(x/2, z/2) ,
+               terrain.terrainData.GetHeight(x/2+1, z/2) ,
+               terrain.terrainData.GetHeight(x/2, z/2+1) ,
+               terrain.terrainData.GetHeight(x/2+1, z/2+1) );
+
+                root.insertHeights(x, z, cornerHeights);
+            }
+        }
+    }
+    bool isInFrustum(Node item) {
+         Profiler.BeginSample("FrustumCulling");
+        //这部分 常规的 视锥剔除 性能是严重不足的 所以用视锥的外接圆锥 夹角做更保守剔除
+        Vector3 dpos = item.aabb.center - Camera.main.transform.position;
+        float dis = dpos.magnitude;
+   
+        float rAll = Mathf.Acos(Vector3.Dot(dpos.normalized, Camera.main.transform.forward));
+        float rNode = Mathf.Atan(item.aabb.extents.magnitude / dis);
+        float rFrustun = Camera.main.fieldOfView / 2*Mathf.Max(1, Camera.main.aspect) * Mathf.Deg2Rad;
+        bool inF = rAll < rNode + rFrustun;
+        
+        Profiler.EndSample();
+        return inF;
+    
     }
 
- 
+
 
     void OnDestroy()
     {
@@ -403,14 +486,15 @@ public class VT_Terrain : MonoBehaviour
         foreach (var item in Node.currentAllLeaves)
         {
 
-        
-           
-            Gizmos.DrawWireCube(terrainOffset+new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), new Vector3(1, 0, 1) * item.size);
-            UnityEditor.Handles.Label(terrainOffset + new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), item.physicTexIndex + "");
+
+            Gizmos.color = isInFrustum(item) ? Color.green : Color.red;
+          //  Gizmos.DrawWireCube(terrainOffset+new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), new Vector3(1, 0, 1) * item.size);
+            Gizmos.DrawWireCube(terrainOffset+item.aabb.center, item.aabb.size);
+         //   UnityEditor.Handles.Label(terrainOffset + new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), item.physicTexIndex + "");
             leafCount++;
         }
-     //print("leafCount:" + leafCount);
-       // print("freeIndexCount:" + (clipRTAlbedoArray.volumeDepth- Node.physicEmptyIndexQueue.Count));
+    // print("leafCount:" + leafCount);
+    //   print("freeIndexCount:" + (clipRTAlbedoArray.volumeDepth- Node.physicEmptyIndexQueue.Count));
  
 
 
@@ -420,9 +504,12 @@ public class VT_Terrain : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-
+     
+        frustumPlanes = GeometryUtility.CalculateFrustumPlanes(Camera.main);
        
-      
+
+
+
         Shader.SetGlobalTexture("_VT_AlbedoTex", clipRTAlbedoArray);
         Shader.SetGlobalTexture("_VT_NormalTex", clipRTNormalArray);
         Shader.SetGlobalTexture("_VT_IndexTex", indexRT);
@@ -430,7 +517,8 @@ public class VT_Terrain : MonoBehaviour
  
         Profiler.BeginSample("updateAllLeavesState");
        
-        Node.updateAllLeavesState(new Vector2(Camera.main.transform.position.x- terrainOffset.x, Camera.main.transform.position.z- terrainOffset.z));
+       // Node.updateAllLeavesState(new Vector2(Camera.main.transform.position.x- terrainOffset.x, Camera.main.transform.position.z- terrainOffset.z));
+        Node.updateAllLeavesState( Camera.main.transform.position- terrainOffset);
         Profiler.EndSample();
 
     }
@@ -438,7 +526,7 @@ public class VT_Terrain : MonoBehaviour
     private void onLoadNodeData(Node item)
     {
 
-      //  print("loadata:" + item.physicTexIndex);
+     // print("loadata:" + item.physicTexIndex);
         
      
         RenderTexture albedoRT, normalRT;
@@ -457,7 +545,7 @@ public class VT_Terrain : MonoBehaviour
         indexGenerator.SetInt("offsetX", item.x);
         indexGenerator.SetInt("offsetZ", item.z);
         indexGenerator.Dispatch(0, rectSize, rectSize, 1);
-        Profiler.EndSample();
+ 
 
     }
 

@@ -38,6 +38,13 @@ public class Test : MonoBehaviour {
 			 
 		
 		}
+		if (Input.GetKeyDown(KeyCode.F))
+		{
+
+			Camera.main.fieldOfView = Camera.main.fieldOfView == 60 ? 20 : 60;
+
+
+		}
 		if (moving == false) return;
 		var pos = transform.position;
 		pos.z = startZ + Mathf.PingPong(endZ - startZ + (Time.time - startTime) * speed, endZ - startZ);
@@ -47,7 +54,8 @@ public class Test : MonoBehaviour {
 	
  
 	void Start() {
-	
+
+  
  
 
 	}
