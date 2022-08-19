@@ -2,7 +2,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-
+using System.Threading;
 using UnityEngine;
 using UnityEngine.Profiling;
  
@@ -45,7 +45,8 @@ public class VT_Terrain : MonoBehaviour
         
         public HashSet<Renderer> decals;
         internal static Func<Node, bool> isInFrustum;
- 
+        public static float tanHalfFov;
+        public static int CurrentLoopFrame;
 
         internal void ceateFullChildren()
         {
@@ -113,7 +114,7 @@ public class VT_Terrain : MonoBehaviour
             var tempList = currentAllLeaves;
             currentAllLeaves = nextAllLeaves;
             nextAllLeaves = tempList;
-            
+            CurrentLoopFrame++;
 
         }
 
@@ -121,7 +122,7 @@ public class VT_Terrain : MonoBehaviour
         {
             if (nodeState == NodeState.Hidden) return;
 
-            if (parent!=null&& nodeState ==  NodeState.Leaf && parent.dontMergeOnFrame != Time.frameCount)
+            if (parent!=null&& nodeState ==  NodeState.Leaf && parent.dontMergeOnFrame != CurrentLoopFrame)
             {
                 int parent_lodSize = parent.calculateLodSize(relativeCamPos);
                 bool allBrothersAreLeaf = true;
@@ -138,7 +139,7 @@ public class VT_Terrain : MonoBehaviour
 
             }
             if (parent != null) {
-                parent.dontMergeOnFrame = Time.frameCount;
+                parent.dontMergeOnFrame = CurrentLoopFrame;
             }
             int lodSize = calculateLodSize(relativeCamPos);
 
@@ -236,7 +237,7 @@ public class VT_Terrain : MonoBehaviour
               dis = Mathf.Max(1, Mathf.Sqrt(dis));
  
          
-           int lod = Mathf.Max(0, (int)(Mathf.Log(Mathf.Tan(Camera.main.fieldOfView / 2 * Mathf.Deg2Rad) * dis, 2)  ));
+           int lod = Mathf.Max(0, (int)(Mathf.Log(tanHalfFov * dis, 2)  ));
 
             
                 if (isInFrustum(this) == false)
@@ -357,13 +358,21 @@ public class VT_Terrain : MonoBehaviour
 
     private VirtualCapture virtualCapture;
     public Transform decalsRoot;
-    private Plane[] frustumPlanes;
+    
     [Range(0,10)]
     public int outFrustumLodBias = 2;
+    private Thread threadTerrainLod;
+    private Vector3 Camera_main_position;
+    private Vector3 Camera_main_forward;
+    private float Camera_main_aspect;
+    private float Camera_main_fov;
+    private Queue<Node> waitingLoadQueue;
+
+
     void Start()
     {
-  
-      
+
+        waitingLoadQueue = new Queue<Node>();
         virtualCapture = GetComponent<VirtualCapture>();
         indexRT = new RenderTexture(rootSize, rootSize, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         indexRT.useMipMap = false;
@@ -446,19 +455,31 @@ public class VT_Terrain : MonoBehaviour
                 root.insertHeights(x, z, cornerHeights);
             }
         }
+       
+        threadTerrainLod = new Thread(threadTerrainLodLoop);
+        threadTerrainLod.Start();
+    }
+    void threadTerrainLodLoop() {
+
+        while (true)
+        {
+            Thread.Sleep(16);
+            Node.updateAllLeavesState(Camera_main_position - terrainOffset);
+        }
+      
     }
     bool isInFrustum(Node item) {
-         Profiler.BeginSample("FrustumCulling");
+ 
         //这部分 常规的 视锥剔除 性能是严重不足的 所以用视锥的外接圆锥 夹角做更保守剔除
-        Vector3 dpos = item.aabb.center - Camera.main.transform.position;
+        Vector3 dpos = item.aabb.center -Camera_main_position;
         float dis = dpos.magnitude;
    
-        float rAll = Mathf.Acos(Vector3.Dot(dpos.normalized, Camera.main.transform.forward));
+        float rAll = Mathf.Acos(Vector3.Dot(dpos.normalized, Camera_main_forward));
         float rNode = Mathf.Atan(item.aabb.extents.magnitude / dis);
-        float rFrustun = Camera.main.fieldOfView / 2*Mathf.Max(1, Camera.main.aspect) * Mathf.Deg2Rad;
+        float rFrustun = Camera_main_fov / 2*Mathf.Max(1, Camera_main_aspect) * Mathf.Deg2Rad;
         bool inF = rAll < rNode + rFrustun;
         
-        Profiler.EndSample();
+       
         return inF;
     
     }
@@ -476,77 +497,92 @@ public class VT_Terrain : MonoBehaviour
 #if UNITY_EDITOR
     void OnDrawGizmos()
     {
+        // 多线程后 这个调试功能 不再可用 需要加锁 影响性能就先关闭了
+        /*
         if (root == null) return;
 
         Gizmos.color = Color.green;
 
       
 
-        int leafCount = 0;
-        foreach (var item in Node.currentAllLeaves)
-        {
+            int leafCount = 0;
+            foreach (var item in Node.currentAllLeaves)
+            {
 
+                if (item == null) continue;
 
-            Gizmos.color = isInFrustum(item) ? Color.green : Color.red;
-          //  Gizmos.DrawWireCube(terrainOffset+new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), new Vector3(1, 0, 1) * item.size);
-            Gizmos.DrawWireCube(terrainOffset+item.aabb.center, item.aabb.size);
-         //   UnityEditor.Handles.Label(terrainOffset + new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), item.physicTexIndex + "");
-            leafCount++;
+                Gizmos.color = isInFrustum(item) ? Color.green : Color.red;
+               
+                Gizmos.DrawWireCube(terrainOffset + item.aabb.center, item.aabb.size);
+                //   UnityEditor.Handles.Label(terrainOffset + new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), item.physicTexIndex + "");
+                leafCount++;
+            }
+
+          
+
         }
-    // print("leafCount:" + leafCount);
-    //   print("freeIndexCount:" + (clipRTAlbedoArray.volumeDepth- Node.physicEmptyIndexQueue.Count));
- 
-
-
+        */
     }
 #endif
    
     // Update is called once per frame
     void Update()
     {
-     
-        frustumPlanes = GeometryUtility.CalculateFrustumPlanes(Camera.main);
-       
+        Camera_main_position = Camera.main.transform.position;
+        Camera_main_forward = Camera.main.transform.forward;
+        Camera_main_aspect = Camera.main.aspect;
+        Camera_main_fov = Camera.main.fieldOfView;
+        Node.tanHalfFov = Mathf.Tan(Camera.main.fieldOfView / 2 * Mathf.Deg2Rad);
 
 
 
-        Shader.SetGlobalTexture("_VT_AlbedoTex", clipRTAlbedoArray);
+
+    Shader.SetGlobalTexture("_VT_AlbedoTex", clipRTAlbedoArray);
         Shader.SetGlobalTexture("_VT_NormalTex", clipRTNormalArray);
         Shader.SetGlobalTexture("_VT_IndexTex", indexRT);
 
- 
-        Profiler.BeginSample("updateAllLeavesState");
-       
-       // Node.updateAllLeavesState(new Vector2(Camera.main.transform.position.x- terrainOffset.x, Camera.main.transform.position.z- terrainOffset.z));
-        Node.updateAllLeavesState( Camera.main.transform.position- terrainOffset);
-        Profiler.EndSample();
+
+        loadQueue();
 
     }
 
     private void onLoadNodeData(Node item)
     {
-
-     // print("loadata:" + item.physicTexIndex);
-        
-     
-        RenderTexture albedoRT, normalRT;
- 
-        virtualCapture.virtualCapture_MRT( item, out albedoRT, out normalRT);
-        for (int i = 0; i < 4; i++)
+        lock (waitingLoadQueue)
         {
-            Graphics.CopyTexture(albedoRT, 0, i, clipRTAlbedoArray, item.physicTexIndex, i);
-            Graphics.CopyTexture(normalRT, 0, i, clipRTNormalArray, item.physicTexIndex, i);
+            waitingLoadQueue.Enqueue(item);
         }
+        // print("loadata:" + item.physicTexIndex);
 
-        indexGenerator.SetVector("value", new Vector4(item.physicTexIndex, item.x, item.z, item.size));
 
-        //   只处理 mipmap0 , 也可以选择写入每一级mipmap 根据实际开销对比 选择创建mipmaps开销 还是选择 shader采样的缓存命中低
-        int rectSize = item.size;
-        indexGenerator.SetInt("offsetX", item.x);
-        indexGenerator.SetInt("offsetZ", item.z);
-        indexGenerator.Dispatch(0, rectSize, rectSize, 1);
  
 
+    }
+    private void loadQueue() {
+        lock (waitingLoadQueue)
+        {
+            while (waitingLoadQueue.Count > 0)
+            {
+                var item = waitingLoadQueue.Dequeue();
+
+                RenderTexture albedoRT, normalRT;
+
+                virtualCapture.virtualCapture_MRT(item, out albedoRT, out normalRT);
+                for (int i = 0; i < 4; i++)
+                {
+                    Graphics.CopyTexture(albedoRT, 0, i, clipRTAlbedoArray, item.physicTexIndex, i);
+                    Graphics.CopyTexture(normalRT, 0, i, clipRTNormalArray, item.physicTexIndex, i);
+                }
+
+                indexGenerator.SetVector("value", new Vector4(item.physicTexIndex, item.x, item.z, item.size));
+
+                //   只处理 mipmap0 , 也可以选择写入每一级mipmap 根据实际开销对比 选择创建mipmaps开销 还是选择 shader采样的缓存命中低
+                int rectSize = item.size;
+                indexGenerator.SetInt("offsetX", item.x);
+                indexGenerator.SetInt("offsetZ", item.z);
+                indexGenerator.Dispatch(0, rectSize, rectSize, 1);
+            }
+        }
     }
 
 }
