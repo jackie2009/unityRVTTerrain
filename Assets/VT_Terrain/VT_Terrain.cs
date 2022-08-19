@@ -242,8 +242,8 @@ public class VT_Terrain : MonoBehaviour
             
                 if (isInFrustum(this) == false)
                 {
-                //0.577f  为 60fov的 tan 半角值,这样做是因为 现有项目不开镜的时候一般都是60 这样转身的时候就不用变化lod和加载了,可根据实际项目决定 视锥外的这个lod
-                int lodMax = Mathf.Max(0, (int)(Mathf.Log(dis*0.577f, 2)));
+                //0.577f  为 60fov的 tan 半角值,这样做是因为 现有项目不开镜的时候一般都是60 这样转身的时候就不用变化太多级lod和多次加载了,可根据实际项目决定 视锥外的这个lod
+                int lodMax = Mathf.Max(0, (int)(Mathf.Log(dis*0.577f, 2)))+1;
                 lod = Mathf.Max(lod, lodMax);
                    
                 }
@@ -464,9 +464,16 @@ public class VT_Terrain : MonoBehaviour
         while (true)
         {
             Thread.Sleep(16);
-            Node.updateAllLeavesState(Camera_main_position - terrainOffset);
+                #if UNITY_EDITOR
+                    lock (Node.currentAllLeaves)
+                    {
+                #endif
+                          Node.updateAllLeavesState(Camera_main_position - terrainOffset);
+                #if UNITY_EDITOR
+                     }
+                #endif
         }
-      
+
     }
     bool isInFrustum(Node item) {
  
@@ -497,15 +504,16 @@ public class VT_Terrain : MonoBehaviour
 #if UNITY_EDITOR
     void OnDrawGizmos()
     {
-        // 多线程后 这个调试功能 不再可用 需要加锁 影响性能就先关闭了
-        /*
+         
+     
         if (root == null) return;
 
         Gizmos.color = Color.green;
 
-      
 
-            int leafCount = 0;
+        lock (Node.currentAllLeaves) { 
+           
+            print(Node.currentAllLeaves.Count);
             foreach (var item in Node.currentAllLeaves)
             {
 
@@ -515,13 +523,14 @@ public class VT_Terrain : MonoBehaviour
                
                 Gizmos.DrawWireCube(terrainOffset + item.aabb.center, item.aabb.size);
                 //   UnityEditor.Handles.Label(terrainOffset + new Vector3(item.x + item.size / 2.0f, 0, item.z + item.size / 2.0f), item.physicTexIndex + "");
-                leafCount++;
+           
             }
-
+          
           
 
         }
-        */
+        
+        
     }
 #endif
    
