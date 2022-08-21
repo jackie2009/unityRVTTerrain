@@ -237,7 +237,7 @@ public class VT_Terrain : MonoBehaviour
               dis = Mathf.Max(1, Mathf.Sqrt(dis));
  
          
-           int lod = Mathf.Max(0, (int)(Mathf.Log(tanHalfFov * dis, 2)  ));
+           int lod = Mathf.Max(0, (int)(Mathf.Log(tanHalfFov * dis, 2) -0.5 ));
 
             
                 if (isInFrustum(this) == false)
