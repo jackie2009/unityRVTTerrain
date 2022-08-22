@@ -233,11 +233,12 @@ public class VT_Terrain : MonoBehaviour
         }
         private int calculateLodSize(Vector3 relativeCamPos)
         {
-            var dis = CalculateClosestPoint( relativeCamPos, aabb);
-              dis = Mathf.Max(1, Mathf.Sqrt(dis));
- 
-         
-           int lod = Mathf.Max(0, (int)(Mathf.Log(tanHalfFov * dis, 2)  ));
+              var closedPt = aabb.ClosestPoint(relativeCamPos);
+            var dis = Vector3.Distance(relativeCamPos, closedPt) ;
+          // 用最近点计算lod 或 用注释里细分一次后 最近那块的近似中心点计算        
+          // if(dis>0)dis+= Vector3.Distance(aabb.center, closedPt)/2; 
+          
+            int lod = Mathf.Max(0, (int)(Mathf.Log(tanHalfFov * dis, 2) -0.5f ));
 
             
                 if (isInFrustum(this) == false)
@@ -251,37 +252,7 @@ public class VT_Terrain : MonoBehaviour
             return 1 << lod;
         }
 
-        float CalculateClosestPoint(Vector3 pos, Bounds bound)
-        {
-
-            Vector3 centerPos =  bound.center;
-            Vector3 aabbExt = bound.extents;
-            // compute coordinates of point in box coordinate system
-            Vector3 closestPos = pos - centerPos;
-
-            // project test point onto box
-            float fSqrDistance = 0;
-            float fDelta = 0;
-          
-            for (int i = 0; i < 3; i++)
-            {
-                if (closestPos[i] < -aabbExt[i])
-                {
-                    fDelta = closestPos[i] + aabbExt[i];
-                    fSqrDistance += fDelta * fDelta;
-                    closestPos[i] = -aabbExt[i];
-                }
-                else if (closestPos[i] > aabbExt[i])
-                {
-                    fDelta = closestPos[i] - aabbExt[i];
-                    fSqrDistance += fDelta * fDelta;
-                    closestPos[i] = aabbExt[i];
-                }
-            }
-
-            return fSqrDistance;
-            
-        }
+       
 
         //因为远处不绘制贴花 否则一大块要画一堆性能不好 所以 用 nodeSizeLimit做限制
         internal void insertDecal(int vx, int vz, Renderer decal,int nodeSizeLimit)
@@ -363,7 +334,7 @@ public class VT_Terrain : MonoBehaviour
     private float Camera_main_aspect;
     private float Camera_main_fov;
     private Queue<Node> waitingLoadQueue;
-
+    private float rotFrustun;
 
     void Start()
     {
@@ -461,15 +432,19 @@ public class VT_Terrain : MonoBehaviour
         while (true)
         {
             Thread.Sleep(16);
-                #if UNITY_EDITOR
-                    lock (Node.currentAllLeaves)
+            float halfH = Mathf.Tan(Camera_main_fov / 2 * Mathf.Deg2Rad);
+            float halfW = halfH * Camera_main_aspect;
+            float halfDis = Mathf.Sqrt(halfH * halfH + halfW * halfW);
+            rotFrustun = Mathf.Atan(halfDis);
+#if UNITY_EDITOR
+            lock (Node.currentAllLeaves)
                     {
                 #endif
                           Node.updateAllLeavesState(Camera_main_position - terrainOffset);
                 #if UNITY_EDITOR
                      }
 #endif
-            Debug.LogError(44);
+ 
         }
 
     }
@@ -481,8 +456,8 @@ public class VT_Terrain : MonoBehaviour
    
         float rAll = Mathf.Acos(Vector3.Dot(dpos.normalized, Camera_main_forward));
         float rNode = Mathf.Atan(item.aabb.extents.magnitude / dis);
-        float rFrustun = Camera_main_fov / 2*Mathf.Max(1, Camera_main_aspect) * Mathf.Deg2Rad;
-        bool inF = rAll < rNode + rFrustun;
+      
+        bool inF = rAll < rNode + rotFrustun;
         
        
         return inF;
