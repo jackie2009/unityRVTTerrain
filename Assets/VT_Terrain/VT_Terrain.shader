@@ -41,13 +41,15 @@ Shader "VT_Terrain" {
 				half weight=1;
 				fixed4 mixedDiffuse;
 				 
-				float4 indexData = tex2D(_VT_IndexTex,  (IN.tc_Control));
+				int2 indexData =(int2)( tex2D(_VT_IndexTex,  (IN.tc_Control)).rg*255+0.5);
+				indexData.x = (indexData.x*256 )+ indexData.y;
+				int lod =  indexData.x % 16;
+				int size =  pow(2.0f, lod) + 0.5;//
+				int index = indexData.x /16 ;
 				float2 wpos = IN.tc_Control * VT_RootSize;
-				int lod = (int)(log2(indexData.w) + 0.5);
-				float2 localUV =saturate( (wpos - indexData.yz ) / indexData.w);
-				//float lodBiasScale = 0.5;
-				//float2 dx_vtc = ddx(wpos* virtualTextArraySize * lodBiasScale);
-				//float2 dy_vtc = ddy(wpos* virtualTextArraySize * lodBiasScale);
+			 
+				float2 localUV =frac( wpos/ size);
+	 
 
 				 float lodBias  =-0.65;
 				 float2 dx_vtc = ddx(wpos* virtualTextArraySize);
@@ -55,10 +57,10 @@ Shader "VT_Terrain" {
 				float md = max(dot(dx_vtc, dx_vtc), dot(dy_vtc, dy_vtc));
 				float mipmap= clamp( 0.5 * log2(md)-lod+ lodBias,0,3);
 				 
-			//	  localUV = lerp((1<< (5 - lod))/ 256.0, 1 - (1 << (5 - lod)) / 256.0, localUV);
+			 
 
-				fixed4 albedo =  UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_AlbedoTex, float3(localUV, indexData.r), mipmap);
-				float3 normal = UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_NormalTex, float3(localUV, indexData.r), mipmap);
+				fixed4 albedo =   UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_AlbedoTex, float3(localUV, index), mipmap);
+				float3 normal = UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_NormalTex, float3(localUV, index), mipmap);
 				normal =  normal * 2 - 1;
 
  

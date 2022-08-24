@@ -341,10 +341,11 @@ public class VT_Terrain : MonoBehaviour
 
         waitingLoadQueue = new Queue<Node>();
         virtualCapture = GetComponent<VirtualCapture>();
-        indexRT = new RenderTexture(rootSize, rootSize, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        indexRT = new RenderTexture(rootSize, rootSize, 0, RenderTextureFormat.RG16, RenderTextureReadWrite.Linear);
         indexRT.useMipMap = false;
         indexRT.autoGenerateMips = false;
         indexRT.enableRandomWrite = true;
+        indexRT.name = "indexRT";
         indexRT.filterMode = FilterMode.Point;
         indexRT.Create();
         indexGenerator.SetTexture(0, "Result", indexRT);
@@ -556,8 +557,8 @@ public class VT_Terrain : MonoBehaviour
                     Graphics.CopyTexture(albedoRT, 0, i, clipRTAlbedoArray, item.physicTexIndex, i);
                     Graphics.CopyTexture(normalRT, 0, i, clipRTNormalArray, item.physicTexIndex, i);
                 }
-
-                indexGenerator.SetVector("value", new Vector4(item.physicTexIndex, item.x, item.z, item.size));
+                int level =Mathf.RoundToInt( Mathf.Log(item.size, 2));
+                indexGenerator.SetInt("value",   item.physicTexIndex*16 +level );
 
                 //   只处理 mipmap0 , 也可以选择写入每一级mipmap 根据实际开销对比 选择创建mipmaps开销 还是选择 shader采样的缓存命中低
                 int rectSize = item.size;

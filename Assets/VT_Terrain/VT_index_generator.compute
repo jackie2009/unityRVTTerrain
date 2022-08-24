@@ -1,14 +1,18 @@
 ﻿// Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
  
-RWTexture2D<int4> Result;
-int4 value;
+RWTexture2D<float2> Result;
+uint  value;
 uint  offsetX;
 uint  offsetZ;
+
+ 
+
 [numthreads(1,1,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
- Result[id.xy+ uint2(offsetX, offsetZ)] = value;
+ 
+	Result[id.xy + uint2(offsetX, offsetZ)] =     float2(value / 256u, value % 256u)/255;
  
 	 
 }
