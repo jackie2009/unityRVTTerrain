@@ -8,7 +8,7 @@ Shader "VT_Terrain" {
 		}
 
 			CGINCLUDE
-#pragma surface surf Lambert vertex:SplatmapVert2  
+#pragma surface surf Lambert vertex:SplatmapVert2 
 #pragma multi_compile_fog
 #include "TerrainSplatmapCommon.cginc"
  
@@ -62,11 +62,11 @@ Shader "VT_Terrain" {
 				fixed4 albedo =   UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_AlbedoTex, float3(localUV, index), mipmap);
 				float3 normal = UNITY_SAMPLE_TEX2DARRAY_LOD(_VT_NormalTex, float3(localUV, index), mipmap);
 				normal =  normal * 2 - 1;
-
+				normal.z = sqrt(1 - dot(normal.xy, normal.xy));
  
 
-				mixedDiffuse = albedo;// mipmap / 4;
-					o.Normal = normal;
+				mixedDiffuse = albedo;// albedo;// mipmap / 4;
+				o.Normal =  normal;
  
 
 					o.Albedo =  mixedDiffuse.rgb;//  +lod * 0.05;

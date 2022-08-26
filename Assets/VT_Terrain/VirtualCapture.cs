@@ -16,18 +16,23 @@ public class VirtualCapture : MonoBehaviour {
 	// Use this for initialization
 	public Shader decalBlitShader;
 	private Material captureDecalMat;
- 
+	private RVTCompress rVTCompress;
+	public ComputeShader compressShader;
+	public RenderTexture debugTex0;
+	public RenderTexture debugTex1;
 	void Awake () {
 		captureDecalMat = new Material(decalBlitShader);
 		mipmapCount = (int)Mathf.Log(virtualTextArraySize, 2);
 		clipRTs = new RenderTexture[2];// 
+
 		for (int i = 0; i < clipRTs.Length; i++)
 		{
-
-			clipRTs[i] = new RenderTexture(virtualTextArraySize, virtualTextArraySize, 0, i == 0 ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGB32, i == 0 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear);
+ 
+	    clipRTs[i] = new RenderTexture(virtualTextArraySize, virtualTextArraySize, 0, i == 0 ? RenderTextureFormat.ARGB32 : RenderTextureFormat.ARGB32, i == 0 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear);
 			clipRTs[i].useMipMap = true;
-			clipRTs[i].autoGenerateMips = false;
-			clipRTs[i].Create();
+			clipRTs[i].autoGenerateMips =false;
+
+		clipRTs[i].Create();
 
 		}
 
@@ -63,7 +68,11 @@ public class VirtualCapture : MonoBehaviour {
 
 		//mrt mode
 		mrtRB = new RenderBuffer[] { clipRTs[0].colorBuffer, clipRTs[1].colorBuffer };
-		 
+#if RVT_COMPRESS_ON
+		rVTCompress = new RVTCompress(compressShader, clipRTs[0], clipRTs[1]);
+		debugTex0 = rVTCompress.tex0[0];
+		debugTex1 = rVTCompress.tex1[0];
+#endif
 
 	}
 	void OnDestroy()
@@ -78,12 +87,18 @@ public class VirtualCapture : MonoBehaviour {
 
 			}
 		}
+		if (rVTCompress != null) rVTCompress.release();
+ 
 
 	}
 
- 
-	public void  virtualCapture_MRT(VT_Terrain.Node item , out RenderTexture albedoRT,out RenderTexture normalRT)
+#if !RVT_COMPRESS_ON
+	public void  virtualCapture_MRT(VT_Terrain.Node item , RenderTexture clipRTAlbedoArray, RenderTexture clipRTNormalArray)
+#else
+	public void virtualCapture_MRT(VT_Terrain.Node item, Texture2DArray clipRTAlbedoArray, Texture2DArray clipRTNormalArray)
+#endif
 	{
+
 		Vector2 center = new Vector2(item.x + item.size / 2.0f, item.z + item.size / 2.0f);
 		float size = item.size;
 		HashSet<Renderer> decals = item.decals;
@@ -150,10 +165,29 @@ public class VirtualCapture : MonoBehaviour {
         
    GL.PopMatrix();
 		RenderTexture.active = oldRT;
-		albedoRT = clipRTs[0];
-		normalRT = clipRTs[1];
-		albedoRT.GenerateMips();
-		normalRT.GenerateMips();
+
+		clipRTs[0].GenerateMips();
+		clipRTs[1].GenerateMips();
+
+#if RVT_COMPRESS_ON
+		//Graphics.CopyTexture 在5.x 不能支持不同格式之间拷贝 需要用高版本(2019看过是支持的) 我这里是拿2019的源码 修改了5.x引擎源码,所以普通的5.x不能直接用 需要升级引擎 
+		for (int i = 0; i < 4; i++)
+		{
+			rVTCompress.CompressToSmallRT(i);
+			Graphics.CopyTexture(rVTCompress.tex0[i], 0, 0,0,0, rVTCompress.tex0[i].width, rVTCompress.tex0[i].height , clipRTAlbedoArray, item.physicTexIndex, i,0,0);
+			Graphics.CopyTexture(rVTCompress.tex1[i], 0, 0, 0, 0, rVTCompress.tex1[i].width, rVTCompress.tex1[i].height, clipRTNormalArray, item.physicTexIndex, i,0,0);
+		}
+#else
+
+		
+		for (int i = 0; i < 4; i++)
+		{
+			Graphics.CopyTexture(clipRTs[0], 0, i, clipRTAlbedoArray, item.physicTexIndex, i);
+			Graphics.CopyTexture(clipRTs[1], 0, i, clipRTNormalArray, item.physicTexIndex, i);
+		}
+
+#endif
+
 	}
 
 #if UNITY_EDITOR

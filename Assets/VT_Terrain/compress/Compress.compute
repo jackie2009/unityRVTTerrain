@@ -1,0 +1,40 @@
+ #include "ETCCompress.hlsl"
+#include "BCCompress.hlsl"
+ 
+#pragma kernel CSMain
+RWTexture2D<uint4> Result0;
+Texture2D<float4> RenderTexture0;
+SamplerState samplerRenderTexture0;
+
+RWTexture2D<uint4> Result1;
+Texture2D<float4> RenderTexture1;
+SamplerState samplerRenderTexture1;
+
+uint4 DestRect;
+uint mipmapLevel;
+[numthreads(8, 8, 1)]
+void CSMain(uint3 ThreadId : SV_DispatchThreadID)
+{
+    uint2 SamplePos = ThreadId.xy * 4;
+    if (any(SamplePos >= DestRect.zw/ (1 << mipmapLevel)))
+        return;
+
+    float2 TexelUVSize = 1.f / float2(DestRect.zw)*(1<< mipmapLevel);
+    float2 SampleUV = (float2(SamplePos) + 0.5f) * TexelUVSize;
+
+    float3 BlockBaseColor[16];
+    ReadBlockRGB(RenderTexture0, samplerRenderTexture0, SampleUV, TexelUVSize, BlockBaseColor);
+    
+    float BlockA[16];
+    ReadBlockA(RenderTexture0, samplerRenderTexture0, SampleUV, TexelUVSize, BlockA);
+ 
+    Result0[ThreadId.xy] =  CompressBC3Block_SRGB(BlockBaseColor, BlockA);
+   //use BlockA for  float BlockX[16];
+    float BlockY[16];
+    ReadBlockDXT5nm(RenderTexture1, samplerRenderTexture1, SampleUV, TexelUVSize, BlockA, BlockY);
+
+    Result1[ThreadId.xy] = CompressBC5Block(BlockA, BlockY);
+  
+
+ 
+}

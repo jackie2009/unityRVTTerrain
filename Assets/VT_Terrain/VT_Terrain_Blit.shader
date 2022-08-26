@@ -141,7 +141,8 @@
 			PixelOutput po;
 			po.col0 =  DiffuseAll;
 			po.col1 =   half4(NormalAll.xyz * 0.5 + 0.5, 1);
- 
+	 
+		 
 			return po;
 			}
  
