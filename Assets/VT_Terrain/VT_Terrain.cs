@@ -15,12 +15,14 @@ public class VT_Terrain : MonoBehaviour
 
         private enum NodeState
         { Branch, Leaf, Hidden };
-
+        const int patchSize = 8;// size小于patchSize的node 复用共享node 避免内存的巨大开销
         public static Queue<Node> currentAllLeaves;
         private static Queue<Node> nextAllLeaves;
 
 
         public static Queue<int> physicEmptyIndexQueue;
+        const int sharedNodeCount = 256;
+        public static Queue<Node> sharedNodeQueue;
 
 
 
@@ -51,13 +53,11 @@ public class VT_Terrain : MonoBehaviour
         internal void ceateFullChildren()
         {
             nodeState = NodeState.Hidden;
-            // 为了在编辑测试速度更快(启动更快) 用个简单aabb代替.正确效果需要注释掉这句
-#if UNITY_EDITOR
-            aabb = new Bounds(new Vector3(x + size / 2.0f, 43, z + size / 2.0f), new Vector3(size, 1, size));
-#endif
-            if (size <= 1)
+            
+ 
+            if (size <= patchSize)
             {
-
+                children = new Node[4];
                 return;
             }
 
@@ -97,7 +97,11 @@ public class VT_Terrain : MonoBehaviour
             root.ceateFullChildren();
             root.nodeState = NodeState.Leaf;
             currentAllLeaves.Enqueue(root);
-
+            sharedNodeQueue = new Queue<Node>();
+            for (int i = 0; i < sharedNodeCount; i++)
+            {
+                sharedNodeQueue.Enqueue(new Node() { children = new Node[4]}) ;
+            }
 
 
 
@@ -157,7 +161,7 @@ public class VT_Terrain : MonoBehaviour
             else if (size > lodSize)
             {
                 //不马上细分 而是合并完了再细分 这样 同时存在的叶子数就比较小 否则需要更多的对象数量
-                if (splitCount++ < eventFrameSplitCountMax && physicEmptyIndexQueue.Count >= 3)
+                if (splitCount++ < eventFrameSplitCountMax && physicEmptyIndexQueue.Count >= 3&& sharedNodeQueue.Count>=4 )
                 {
                     split();
 
@@ -183,8 +187,15 @@ public class VT_Terrain : MonoBehaviour
         {
             //  print("split:" + physicTexIndex);
             resetPhysicIndex(this);
+           
             nodeState = NodeState.Branch;
- 
+            if (size <= patchSize) {
+              
+                for (int i = 0; i < 4; i++)
+                {
+                    createSharedChildNode(i);
+                }
+            }
             for (int i = 0; i < 4; i++)
             {
                 children[i].nodeState = NodeState.Leaf;
@@ -196,6 +207,23 @@ public class VT_Terrain : MonoBehaviour
 
 
 
+        }
+
+        private void  createSharedChildNode(int i)
+        {
+            var cnode = sharedNodeQueue.Dequeue();
+            cnode.x = x + (i % 2) * size/2;
+            cnode.z = z + (i / 2) * size/2;
+            cnode.size = size / 2;
+            cnode.parent = this;
+            //绘制时判断贴花aabb是否 在该格子内 
+            cnode.decals = decals;
+
+
+
+            cnode.aabb =  new Bounds(new Vector3(cnode.x + cnode.size / 2.0f, aabb.center.y, cnode.z + cnode.size / 2.0f), new Vector3(cnode.size, aabb.size.y, cnode.size));
+            children[i] = cnode;
+            
         }
 
         // 合并node  队列放入parent 不放自己，并跳过后面3个同级node计算 也就不会放入队列
@@ -211,8 +239,9 @@ public class VT_Terrain : MonoBehaviour
             for (int i = 0; i < 4; i++)
             {
                 resetPhysicIndex(children[i]);
-                //children[i].parent = null;
-                // children[i].closed = true;
+                if(size<= patchSize)
+                sharedNodeQueue.Enqueue( children[i]);
+        
                 children[i].nodeState = NodeState.Hidden;
 
 
@@ -254,7 +283,7 @@ public class VT_Terrain : MonoBehaviour
         internal void insertDecal(int vx, int vz, Renderer decal, int nodeSizeLimit)
         {
 
-            if (size == 1)
+            if (size == patchSize)
             {
                 if (decals == null) {
                     decals = new HashSet<Renderer>();
@@ -293,7 +322,7 @@ public class VT_Terrain : MonoBehaviour
             }
             aabb.Encapsulate(points[1]);
 
-            if (size == 1)
+            if (size == patchSize)
             {
 
                 return;
@@ -378,9 +407,10 @@ public class VT_Terrain : MonoBehaviour
 #else
         clipRTAlbedoArray = new  Texture2DArray(VirtualCapture.virtualTextArraySize, VirtualCapture.virtualTextArraySize, PhysicalTexCount, TextureFormat.DXT5,true,false);
         clipRTAlbedoArray.wrapMode = TextureWrapMode.Clamp;
-
+        clipRTAlbedoArray.Apply(false, true);
         clipRTNormalArray = new Texture2DArray(VirtualCapture.virtualTextArraySize, VirtualCapture.virtualTextArraySize, PhysicalTexCount, TextureFormat.BC5, true, true);
         clipRTNormalArray.wrapMode = TextureWrapMode.Clamp;
+        clipRTNormalArray.Apply(false, true);
 #endif
 
 
@@ -390,7 +420,7 @@ public class VT_Terrain : MonoBehaviour
 
 
         Node.isInFrustum = isInFrustum;
-
+     long usedM1=Profiler.GetMonoUsedSizeLong() / 1024 / 1024;
         root = Node.createRoot(rootSize, PhysicalTexCount, onLoadNodeData);
         Shader.SetGlobalInt("VT_RootSize", rootSize);
         //  root =   Node.createRoot(16,100, onLoadNodeData);
@@ -415,13 +445,13 @@ public class VT_Terrain : MonoBehaviour
             }
             decalsRoot.gameObject.SetActive(false);
         }
-
+        long usedM2 = Profiler.GetMonoUsedSizeLong() / 1024 / 1024;
+        print(usedM1);
+        print(usedM2);
         var terrain = FindObjectOfType<Terrain>();
 
 
-        // 为了在编辑测试速度更快(启动更快) 用个简单aabb代替.正确效果需要 在editor内也执行这句
-#if UNITY_EDITOR
-#else
+       
         //如果要最高性能 先插入到 最小格子 1mx1m 然后向上合计出parent的数据性能更高些 但是初始化时性能不敏感 这样写可读性更好
         for (int x = 0; x < rootSize; x++)
         {
@@ -437,7 +467,7 @@ public class VT_Terrain : MonoBehaviour
                 root.insertHeights(x, z, heightRange);
             }
         }
-#endif
+ 
         threadTerrainLod = new Thread(threadTerrainLodLoop);
         threadTerrainLod.Start();
     }
