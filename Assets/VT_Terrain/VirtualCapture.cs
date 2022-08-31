@@ -3,8 +3,14 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
 using UnityEngine.Profiling;
+using UnityEngine.Rendering;
 
 public class VirtualCapture : MonoBehaviour {
+ 
+	private Mesh decalQuadMesh;
+	private Mesh terrainQuadMesh;
+ 
+	private CommandBuffer drawBuffer;
 	private Material captureMat;
 	public Shader captureShader;
 	public TerrainData terrainData;
@@ -23,10 +29,24 @@ public class VirtualCapture : MonoBehaviour {
 	public RenderTexture debugTex0;
 	public RenderTexture debugTex1;
 	void Awake () {
+		terrainQuadMesh = new Mesh();
+		terrainQuadMesh.vertices = new Vector3[] { new Vector3(0.0f, 0.0f, 0.1f), new Vector3(1.0f, 0.0f, 0.1f), new Vector3(1.0f, 1.0f, 0.1f), new Vector3(0.0f, 1.0f, 0.1f) };
+		terrainQuadMesh.uv = new Vector2[] { new Vector2(0.0f, 0.0f), new Vector2(1.0f, 0.0f), new Vector2(1.0f, 1.0f), new Vector2(0.0f, 1.0f) };
+		terrainQuadMesh.SetIndices(new int []{ 0, 1, 2, 3 }, MeshTopology.Quads, 0);
+		terrainQuadMesh.UploadMeshData(true);
+
+ 
+		decalQuadMesh = new Mesh();
+		decalQuadMesh.vertices = new Vector3[] { new Vector3(-0.5f, -0.5f, 0.1f), new Vector3(0.5f, -0.5f, 0.1f), new Vector3(0.5f, 0.5f, 0.1f), new Vector3(-0.5f, 0.5f, 0.1f) };
+		decalQuadMesh.uv = new Vector2[] { new Vector2(0.0f, 0.0f), new Vector2(1.0f, 0.0f), new Vector2(1.0f, 1.0f), new Vector2(0.0f, 1.0f) };
+		decalQuadMesh.SetIndices(new int[] { 0, 1, 2, 3 }, MeshTopology.Quads, 0);
+		decalQuadMesh.UploadMeshData(true);
+
 		captureDecalMat = new Material(decalBlitShader);
+		captureDecalMat.enableInstancing = true;
 		mipmapCount = (int)Mathf.Log(virtualTextArraySize, 2);
 		clipRTs = new RenderTexture[2];// 
-
+		drawBuffer = new CommandBuffer();
 		for (int i = 0; i < clipRTs.Length; i++)
 		{
  
@@ -100,35 +120,26 @@ public class VirtualCapture : MonoBehaviour {
 	public void virtualCapture_MRT(VT_Terrain.Node item, Texture2DArray clipRTAlbedoArray, Texture2DArray clipRTNormalArray)
 #endif
 	{
-
+		MaterialPropertyBlock mpb = new MaterialPropertyBlock();
 		Vector2 center = new Vector2(item.x + item.size / 2.0f, item.z + item.size / 2.0f);
 		float size = item.size;
 		HashSet<Renderer> decals = item.decals;
 		int terrainSize = (int)terrainData.size.x;
 
-		Shader.SetGlobalVector("blitOffsetScale", new Vector4((center.x - size / 2) / terrainSize, (center.y - size / 2) / terrainSize, (size) / terrainSize, (size) / terrainSize));
+	//	Shader.SetGlobalVector("blitOffsetScale", new Vector4((center.x - size / 2) / terrainSize, (center.y - size / 2) / terrainSize, (size) / terrainSize, (size) / terrainSize));
 
 		RenderTexture oldRT = RenderTexture.active;
 
 		Graphics.SetRenderTarget(mrtRB,clipRTs[0].depthBuffer);
-
+		
 		GL.Clear(false, true, Color.clear);
 
 		GL.PushMatrix();
-		 GL.LoadOrtho();
-		GL.modelview = Matrix4x4.identity;
-
-		captureMat.SetPass(0);     //Pass 0 outputs 2 render textures.
-
-		//Render the full screen quad manually.
-		GL.Begin(GL.QUADS);
-		GL.TexCoord2(0.0f, 0.0f); GL.Vertex3(0.0f, 0.0f, 0.1f);
-		GL.TexCoord2(1.0f, 0.0f); GL.Vertex3(1.0f, 0.0f, 0.1f);
-		GL.TexCoord2(1.0f, 1.0f); GL.Vertex3(1.0f, 1.0f, 0.1f);
-		GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(0.0f, 1.0f, 0.1f);
-		GL.End();
-
+	    GL.LoadOrtho();
  
+		drawBuffer.Clear();
+		mpb.SetVector("blitOffsetScale", new Vector4((center.x - size / 2) / terrainSize, (center.y - size / 2) / terrainSize, (size) / terrainSize, (size) / terrainSize));
+		drawBuffer.DrawMesh(terrainQuadMesh, Matrix4x4.identity, captureMat, 0, 0, mpb);
 		if (decals != null)
 		{
 			//print("decals:" + item.size + "," + item.physicTexIndex);
@@ -153,25 +164,18 @@ public class VirtualCapture : MonoBehaviour {
 				t.y = t.z;
 				t.z = 0;
 
-			 	GL.modelview = Matrix4x4.TRS(t, r, s / size);
-				captureDecalMat.mainTextureOffset = decalRender.sharedMaterial.mainTextureOffset;
-				captureDecalMat.mainTextureScale = decalRender.sharedMaterial.mainTextureScale;
-				captureDecalMat.SetTexture("_MainTex", decalRender.sharedMaterial.GetTexture("_MainTex"));
-				captureDecalMat.SetTexture("_BumpMap", decalRender.sharedMaterial.GetTexture("_BumpMap"));
-				captureDecalMat.SetPass(0);     //Pass 0 outputs 2 render textures.
 
-				//Render the full screen quad manually.
-				GL.Begin(GL.QUADS);
-				GL.TexCoord2(0.0f, 0.0f); GL.Vertex3(-0.5f, -0.5f, 0.1f);
-				GL.TexCoord2(1.0f, 0.0f); GL.Vertex3(0.5f, -0.5f, 0.1f);
-				GL.TexCoord2(1.0f, 1.0f); GL.Vertex3(0.5f, 0.5f, 0.1f);
-				GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(-0.5f, 0.5f, 0.1f);
-				GL.End();
+				mpb.SetVector("_MainTex_ST", new Vector4(decalRender.sharedMaterial.mainTextureScale.x, decalRender.sharedMaterial.mainTextureScale.y, decalRender.sharedMaterial.mainTextureOffset.x, decalRender.sharedMaterial.mainTextureOffset.y));
+
+				mpb.SetTexture("_MainTex", decalRender.sharedMaterial.GetTexture("_MainTex"));
+				mpb.SetTexture("_BumpMap", decalRender.sharedMaterial.GetTexture("_BumpMap"));
+				drawBuffer.DrawMesh(decalQuadMesh, Matrix4x4.TRS(t, r, s / size), captureDecalMat, 0, 0, mpb);
+ 
 			}
 		}
- 
 
-   GL.PopMatrix();
+		Graphics.ExecuteCommandBuffer(drawBuffer);
+		GL.PopMatrix();
 		RenderTexture.active = oldRT;
 
 		clipRTs[0].GenerateMips();
