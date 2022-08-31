@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
+using UnityEngine.Profiling;
 
 public class VirtualCapture : MonoBehaviour {
 	private Material captureMat;
@@ -91,7 +93,7 @@ public class VirtualCapture : MonoBehaviour {
  
 
 	}
-
+ 
 #if !RVT_COMPRESS_ON
 	public void  virtualCapture_MRT(VT_Terrain.Node item , RenderTexture clipRTAlbedoArray, RenderTexture clipRTNormalArray)
 #else
@@ -126,15 +128,20 @@ public class VirtualCapture : MonoBehaviour {
 		GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(0.0f, 1.0f, 0.1f);
 		GL.End();
 
-	 
+ 
 		if (decals != null)
 		{
 			//print("decals:" + item.size + "," + item.physicTexIndex);
 			foreach (var decalRender in decals)
 			{
-
-
-				var r = decalRender.transform.localRotation;
+				if (item.size < VT_Terrain.Node.patchSize)
+				{
+ 
+				 if (decalRender.bounds.max.x < item.aabb.min.x || decalRender.bounds.min.x > item.aabb.max.x) continue;
+				 if (decalRender.bounds.max.z < item.aabb.min.z || decalRender.bounds.min.z > item.aabb.max.z) continue;
+				}
+			 
+					var r = decalRender.transform.localRotation;
 				var s = decalRender.transform.localScale;
 				var re = r.eulerAngles;
 				re.x -= 90;
@@ -162,7 +169,8 @@ public class VirtualCapture : MonoBehaviour {
 				GL.End();
 			}
 		}
-        
+ 
+
    GL.PopMatrix();
 		RenderTexture.active = oldRT;
 

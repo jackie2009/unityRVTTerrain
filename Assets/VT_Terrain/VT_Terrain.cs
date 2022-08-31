@@ -15,7 +15,7 @@ public class VT_Terrain : MonoBehaviour
 
         private enum NodeState
         { Branch, Leaf, Hidden };
-        const int patchSize = 8;// size小于patchSize的node 复用共享node 避免内存的巨大开销
+       public const int patchSize = 8;// size小于patchSize的node 复用共享node 避免内存的巨大开销
         public static Queue<Node> currentAllLeaves;
         private static Queue<Node> nextAllLeaves;
 
@@ -428,17 +428,17 @@ public class VT_Terrain : MonoBehaviour
         {
             foreach (var item in decalsRoot.GetComponentsInChildren<Renderer>())
             {
-                int xMin = (int)(item.bounds.min.x);
-                int xMax = Mathf.CeilToInt(item.bounds.max.x);
-                int zMin = (int)(item.bounds.min.z);
-                int zMax = Mathf.CeilToInt(item.bounds.max.z);
+                int xMin = (int)(item.bounds.min.x-terrainOffset.x)/Node.patchSize;
+                int xMax = Mathf.CeilToInt(item.bounds.max.x - terrainOffset.x) / Node.patchSize;
+                int zMin = (int)(item.bounds.min.z- terrainOffset.z) / Node.patchSize;
+                int zMax = Mathf.CeilToInt(item.bounds.max.z- terrainOffset.z) / Node.patchSize;
                 for (int x = xMin; x <= xMax; x++)
 
                 {
                     for (int z = zMin; z <= zMax; z++)
                     {
 
-                        root.insertDecal(x, z, item, 256);
+                        root.insertDecal(x* Node.patchSize, z* Node.patchSize, item, 256);
                     }
 
                 }
@@ -536,7 +536,7 @@ public class VT_Terrain : MonoBehaviour
 
         lock (Node.currentAllLeaves) { 
            
-            print(Node.currentAllLeaves.Count);
+ 
             foreach (var item in Node.currentAllLeaves)
             {
 
