@@ -475,7 +475,7 @@ public class VT_Terrain : MonoBehaviour
 
         while (true)
         {
-            Thread.Sleep(16);
+            Thread.Sleep(10);
             float halfH = Mathf.Tan(Camera_main_fov / 2 * Mathf.Deg2Rad);
             float halfW = halfH * Camera_main_aspect;
             float halfDis = Mathf.Sqrt(halfH * halfH + halfW * halfW);
@@ -599,7 +599,7 @@ public class VT_Terrain : MonoBehaviour
 
                 
 
-                virtualCapture.virtualCapture_MRT(item, clipRTAlbedoArray, clipRTNormalArray);
+                virtualCapture.virtualCapture_MRT(item, clipRTAlbedoArray, clipRTNormalArray,terrainOffset);
              
                 int level =Mathf.RoundToInt( Mathf.Log(item.size, 2));
                 indexGenerator.SetInt("value",   item.physicTexIndex*16 +level );

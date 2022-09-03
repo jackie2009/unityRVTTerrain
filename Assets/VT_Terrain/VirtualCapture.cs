@@ -117,7 +117,7 @@ public class VirtualCapture : MonoBehaviour {
 #if !RVT_COMPRESS_ON
 	public void  virtualCapture_MRT(VT_Terrain.Node item , RenderTexture clipRTAlbedoArray, RenderTexture clipRTNormalArray)
 #else
-	public void virtualCapture_MRT(VT_Terrain.Node item, Texture2DArray clipRTAlbedoArray, Texture2DArray clipRTNormalArray)
+	public void virtualCapture_MRT(VT_Terrain.Node item, Texture2DArray clipRTAlbedoArray, Texture2DArray clipRTNormalArray,Vector3 terrainOffset)
 #endif
 	{
 		MaterialPropertyBlock mpb = new MaterialPropertyBlock();
@@ -148,8 +148,8 @@ public class VirtualCapture : MonoBehaviour {
 				if (item.size < VT_Terrain.Node.patchSize)
 				{
  
-				 if (decalRender.bounds.max.x < item.aabb.min.x || decalRender.bounds.min.x > item.aabb.max.x) continue;
-				 if (decalRender.bounds.max.z < item.aabb.min.z || decalRender.bounds.min.z > item.aabb.max.z) continue;
+				 if (decalRender.bounds.max.x - terrainOffset.x < item.aabb.min.x || decalRender.bounds.min.x - terrainOffset.x> item.aabb.max.x) continue;
+				 if (decalRender.bounds.max.z - terrainOffset.z< item.aabb.min.z || decalRender.bounds.min.z- terrainOffset.z> item.aabb.max.z) continue;
 				}
 			 
 					var r = decalRender.transform.localRotation;
@@ -159,7 +159,7 @@ public class VirtualCapture : MonoBehaviour {
 				re.z = -re.y;
 				re.y = 0;
 				r.eulerAngles = re;
-				var t = (decalRender.transform.position - new Vector3(item.x, decalRender.transform.position.y, item.z)) / size;
+				var t = (decalRender.transform.position - terrainOffset - new Vector3(item.x, decalRender.transform.position.y, item.z)) / size;
 			 
 				t.y = t.z;
 				t.z = 0;

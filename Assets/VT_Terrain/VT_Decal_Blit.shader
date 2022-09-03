@@ -29,7 +29,7 @@
 
 		sampler2D _BumpMap;
  
-		float4  blitOffsetScale;
+ 
  
 			struct appdata
 			{
@@ -54,9 +54,7 @@
 			{
 				v2f o;
 				o.vertex = UnityObjectToClipPos(v.vertex);
-				
-				//v.uv.xy *= blitOffsetScale.zw;
-				//v.uv.xy += blitOffsetScale.xy;
+ 
 				o.uv = TRANSFORM_TEX(v.uv, _MainTex);
 			  
 				return o;
