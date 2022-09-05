@@ -66,7 +66,7 @@
  
 			PixelOutput po;
 			po.col0 =  tex2D(_MainTex, i.uv);
-			clip(po.col0 - 0.001);
+			clip(po.col0.a - 0.001);
 			po.col1.xyz =  UnpackNormal( tex2D(_BumpMap,i.uv));
 			po.col1.xyz = po.col1.xyz * 0.5 + 0.5;
 			po.col1.a = po.col0.a;
