@@ -115,7 +115,7 @@ public class VirtualCapture : MonoBehaviour {
 	}
  
 #if !RVT_COMPRESS_ON
-	public void  virtualCapture_MRT(VT_Terrain.Node item , RenderTexture clipRTAlbedoArray, RenderTexture clipRTNormalArray)
+	public void  virtualCapture_MRT(VT_Terrain.Node item , RenderTexture clipRTAlbedoArray, RenderTexture clipRTNormalArray, Vector3 terrainOffset)
 #else
 	public void virtualCapture_MRT(VT_Terrain.Node item, Texture2DArray clipRTAlbedoArray, Texture2DArray clipRTNormalArray,Vector3 terrainOffset)
 #endif
